@@ -17,7 +17,6 @@ jobs:
         with:
           images: |
             heilmela/livekit-events
-            ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}

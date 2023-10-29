@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -48,6 +49,8 @@ type RedisConfig struct {
 	ChannelName         string   `envconfig:"channel_name" yaml:"channel_name" default:"livekit"`
 }
 
+var ErrChannelNameRequired = errors.New("channel name is required when using redis")
+
 func NewConfig(path string) (*Config, error) {
 	var config Config
 
@@ -72,7 +75,7 @@ func NewConfig(path string) (*Config, error) {
 	}
 
 	if config.Redis != nil && len(config.Redis.ChannelName) == 0 {
-		return nil, fmt.Errorf("channel name is required when using redis")
+		return nil, ErrChannelNameRequired
 	}
 
 	return &config, nil

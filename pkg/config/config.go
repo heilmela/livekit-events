@@ -45,7 +45,7 @@ type RedisConfig struct {
 	SentinelAddresses   []string `envconfig:"sentinel_addresses" yaml:"sentinel_addresses,omitempty"`
 	ClusterAddresses    []string `envconfig:"cluster_addresses" yaml:"cluster_addresses,omitempty"`
 	ClusterMaxRedirects *int     `envconfig:"cluster_max_redirects" yaml:"cluster_max_redirects,omitempty"`
-	ChannelName         string   `envconfig:"channel_name" yaml:"channel_name,omitempty"`
+	ChannelName         string   `envconfig:"channel_name" yaml:"channel_name" default:"livekit"`
 }
 
 func NewConfig(path string) (*Config, error) {
@@ -69,6 +69,10 @@ func NewConfig(path string) (*Config, error) {
 	validate := validator.New()
 	if err := validate.Struct(config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	if config.Redis != nil && len(config.Redis.ChannelName) == 0 {
+		return nil, fmt.Errorf("channel name is required when using redis")
 	}
 
 	return &config, nil

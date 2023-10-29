@@ -30,7 +30,7 @@ type LivekitEventServer struct {
 func NewLivekitEventServer(logger *zap.Logger, conf *config.Config) *LivekitEventServer {
 	return &LivekitEventServer{
 		logger:       logger,
-		authProvider: auth.NewSimpleKeyProvider(conf.LivekitConfig.ApiKey, conf.LivekitConfig.ApiSecret),
+		authProvider: auth.NewSimpleKeyProvider(conf.Livekit.ApiKey, conf.Livekit.ApiSecret),
 		config:       conf,
 		wsUpgrader: &websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -46,7 +46,7 @@ func NewLivekitEventServer(logger *zap.Logger, conf *config.Config) *LivekitEven
 func (s *LivekitEventServer) StartRedisPublisher() error {
 	s.logger.Info("starting redis publisher")
 
-	rdb, err := config.NewRedisClient(s.config.RedisConfig)
+	rdb, err := config.NewRedisClient(s.config.Redis)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (s *LivekitEventServer) StartRedisPublisher() error {
 			if err != nil {
 				s.logger.Sugar().Errorf("error converting event to JSON: %s", err)
 			} else {
-				_, err := rdb.Publish(context.Background(), s.config.RedisConfig.ChannelName, jsonData).Result()
+				_, err := rdb.Publish(context.Background(), s.config.Redis.ChannelName, jsonData).Result()
 				if err != nil {
 					s.logger.Sugar().Errorf("failed to publish event to redis", err)
 				}
@@ -103,7 +103,7 @@ func (s *LivekitEventServer) TrustUpstream(next http.Handler) http.Handler {
 		}
 		remoteAddress := r.RemoteAddr
 
-		for _, v := range s.config.ServerConfig.TrustedUpstream {
+		for _, v := range s.config.Server.TrustedUpstream {
 			if (forwardedFor != nil && *forwardedFor == v) || v == remoteAddress {
 				next.ServeHTTP(w, r)
 				return

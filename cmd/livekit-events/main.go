@@ -55,13 +55,13 @@ func run() error {
 
 	handler := srv.ServeHTTP
 
-	if len(config.ServerConfig.TrustedUpstream) > 0 {
+	if len(config.Server.TrustedUpstream) > 0 {
 		wrappedHandler := srv.TrustUpstream(http.HandlerFunc(handler))
 		router.HandleFunc("/webhook", wrappedHandler.ServeHTTP).Methods("POST")
 	} else {
 		router.HandleFunc("/webhook", handler).Methods("POST")
 	}
-	if config.RedisConfig != nil {
+	if config.Redis != nil {
 		if err := srv.StartRedisPublisher(); err != nil {
 			logger.Error("failed to start redis publisher")
 			return err
@@ -69,12 +69,12 @@ func run() error {
 	}
 
 	server := &http.Server{
-		Addr:              fmt.Sprintf("%s:%v", config.ServerConfig.BindAddresse, config.ServerConfig.Port),
+		Addr:              fmt.Sprintf("%s:%v", config.Server.BindAddress, config.Server.Port),
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler:           router,
 	}
 
-	logger.Sugar().Infof("started on %s:%v", config.ServerConfig.BindAddresse, config.ServerConfig.Port)
+	logger.Sugar().Infof("started on %s:%v", config.Server.BindAddress, config.Server.Port)
 	err = server.ListenAndServe()
 
 	return err

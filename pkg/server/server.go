@@ -22,6 +22,9 @@ type LivekitEventServer struct {
 	authProvider *auth.SimpleKeyProvider
 	wsUpgrader   *websocket.Upgrader
 	config       *config.Config
+	clients      map[*websocket.Conn]bool
+	broadcast    chan (*livekit.WebhookEvent)
+	mutex        *sync.Mutex
 }
 
 func NewLivekitEventServer(logger *zap.Logger, conf *config.Config) *LivekitEventServer {
@@ -34,12 +37,11 @@ func NewLivekitEventServer(logger *zap.Logger, conf *config.Config) *LivekitEven
 				return true
 			},
 		},
+		clients:   make(map[*websocket.Conn]bool),
+		broadcast: make(chan *livekit.WebhookEvent),
+		mutex:     &sync.Mutex{},
 	}
 }
-
-var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan *livekit.WebhookEvent)
-var mutex = &sync.Mutex{}
 
 func (s *LivekitEventServer) StartRedisPublisher() error {
 	s.logger.Info("starting redis publisher")
@@ -50,21 +52,14 @@ func (s *LivekitEventServer) StartRedisPublisher() error {
 	}
 
 	go func() {
-		//lint:ignore S1000 reason
-		for {
-			select {
-			case event, ok := <-broadcast:
-				if !ok {
-					return
-				}
-				jsonData, err := json.Marshal(event)
+		for event := range s.broadcast {
+			jsonData, err := json.Marshal(event)
+			if err != nil {
+				s.logger.Sugar().Errorf("error converting event to JSON: %s", err)
+			} else {
+				_, err := rdb.Publish(context.Background(), s.config.RedisConfig.ChannelName, jsonData).Result()
 				if err != nil {
-					s.logger.Sugar().Errorf("error converting event to JSON: %s", err)
-				} else {
-					_, err := rdb.Publish(context.Background(), s.config.RedisConfig.ChannelName, jsonData).Result()
-					if err != nil {
-						s.logger.Sugar().Errorf("failed to publish event to redis", err)
-					}
+					s.logger.Sugar().Errorf("failed to publish event to redis", err)
 				}
 			}
 		}
@@ -82,26 +77,19 @@ func (s *LivekitEventServer) WebsocketHandler(w http.ResponseWriter, r *http.Req
 	}
 	defer ws.Close()
 
-	mutex.Lock()
-	clients[ws] = true
-	mutex.Unlock()
+	s.mutex.Lock()
+	s.clients[ws] = true
+	s.mutex.Unlock()
 
-	//lint:ignore S1000 reason
-	for {
-		select {
-		case event, ok := <-broadcast:
-			if !ok {
-				return
-			}
-			for client := range clients {
-				err := client.WriteJSON(event)
-				if err != nil {
-					s.logger.Sugar().Errorf("websocket error: %v", err)
-					client.Close()
-					mutex.Lock()
-					delete(clients, client)
-					mutex.Unlock()
-				}
+	for event := range s.broadcast {
+		for client := range s.clients {
+			err := client.WriteJSON(event)
+			if err != nil {
+				s.logger.Sugar().Errorf("websocket error: %v", err)
+				client.Close()
+				s.mutex.Lock()
+				delete(s.clients, client)
+				s.mutex.Unlock()
 			}
 		}
 	}
@@ -143,6 +131,6 @@ func (s *LivekitEventServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	s.logger.Debug(event.String())
 
-	broadcast <- event
+	s.broadcast <- event
 	w.WriteHeader(http.StatusOK)
 }

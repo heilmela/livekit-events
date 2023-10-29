@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
+	"time"
 
 	"github.com/gorilla/mux"
 	log "github.com/heilmela/livekit-events/internal"
 	cfg "github.com/heilmela/livekit-events/pkg/config"
 	server "github.com/heilmela/livekit-events/pkg/server"
+	"gopkg.in/yaml.v2"
 
 	_ "go.uber.org/automaxprocs"
 )
@@ -24,51 +25,26 @@ func main() {
 
 func run() error {
 	configPath := flag.String("config", "", "Path to config file")
-	apiKey := flag.String("key", "", "Livekit api key")
-	apiSecret := flag.String("secret", "", "Livekit api secret")
 	flag.Parse()
 
-	path := *configPath
-	if path == "" {
-		path = "./config.yaml"
-	}
-	path, err := filepath.Abs("./config.yaml")
-
-	if err == nil {
-		_, err := os.Stat(path)
-		if err != nil {
-			path = ""
-		}
-	} else {
-		path = ""
-	}
-
-	config, cfgErr := cfg.NewConfig(path)
-	if cfgErr != nil && config == nil {
-		return cfgErr
+	config, err := cfg.NewConfig(*configPath)
+	if err != nil && config == nil {
+		return err
 	}
 
 	logger, err := log.NewAtLevel(config.LogLevel)
-
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-
 	defer func() {
 		err = logger.Sync()
 	}()
 
-	if cfgErr != nil {
-		logger.Sugar().Errorf("config parsing error %v", cfgErr)
+	yamlConfig, err := yaml.Marshal(config)
+	if err != nil {
+		return err
 	}
-
-	if *apiKey != "" {
-		config.LivekitConfig.ApiKey = *apiKey
-	}
-
-	if *apiSecret != "" {
-		config.LivekitConfig.ApiSecret = *apiSecret
-	}
+	logger.Debug(string(yamlConfig))
 
 	router := mux.NewRouter()
 	srv := server.NewLivekitEventServer(
@@ -92,8 +68,14 @@ func run() error {
 		}
 	}
 
+	server := &http.Server{
+		Addr:              fmt.Sprintf("%s:%v", config.ServerConfig.BindAddresse, config.ServerConfig.Port),
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler:           router,
+	}
+
 	logger.Sugar().Infof("started on %s:%v", config.ServerConfig.BindAddresse, config.ServerConfig.Port)
-	err = http.ListenAndServe(fmt.Sprintf("%s:%v", config.ServerConfig.BindAddresse, config.ServerConfig.Port), router)
+	err = server.ListenAndServe()
 
 	return err
 }

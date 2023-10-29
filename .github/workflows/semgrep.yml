@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     if: (github.actor != 'dependabot[bot]')
     steps:
-      - uses: actions/checkout@v3
-      - uses: returntocorp/semgrep-action@v1
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: returntocorp/semgrep-action@549796168c0ddcb9149b10a0e79e5f6522f50797
         with:
           config: >-
             p/security-audit

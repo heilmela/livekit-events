@@ -170,3 +170,7 @@ fabric.properties
 
 # Editor-based Rest Client
 .idea/httpRequests
+
+
+# config for local development
+**/config.local.yaml
